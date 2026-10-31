@@ -82,3 +82,51 @@ test('pane draws agents, liveness and molecule progress from bh output', async (
 
   await $.command.run({ command: 'hivewatch', args: 'off' } as never)
 })
+
+test('pane never draws control sequences from bh output or errors', async ($, on) => {
+  const ESC = '\u001b'
+  mock.clock(on, { now: Date.parse('2026-10-12T12:00:00Z') })
+  on('command.register', async (_$, e) => ({ value: { command: e.name } }) as never)
+  on('ui.status', async () => ({ value: undefined }) as never)
+  on('ui.open', async () => ({ value: { isPlaced: true } }) as never)
+  on('process.run', async (_$, e) => {
+    const argv = e.argv.join(' ')
+
+    if (argv.startsWith('bh work list')) {
+      return reply([
+        { id: `${ESC}[2Jp-epic`, title: `${ESC}]0;pwned\u0007Evil\ttitle\u009b2J`, status: 'in_progress', assignee: `dev/${ESC}]8;;http://x\u0007bad${ESC}]8;;\u0007\r`, issue_type: 'epic', heartbeat_at: LONG_AGO, lease_expires_at: FAR },
+      ])
+    }
+
+    if (argv.startsWith('bh work readiness')) {
+      return reply({ steps: [{ id: 'a', status: 'closed', readiness: 'done' }] })
+    }
+
+    return reply([], 1)
+  })
+
+  await $.command.run({ command: 'hivewatch', args: '' } as never)
+
+  const ui = await $.ui.mount({
+    plugin: 'hivewatch',
+    surface: 'terminal',
+    component: 'Pane',
+    requestId: 'hivewatch',
+    props: {
+      title: 'Hive',
+      isFocused: false,
+      bodyColumns: 120,
+      placement: 'dock',
+      scroll: { offset: 0, bodyRows: 30 },
+    } as never,
+  })
+
+  const drawn = textOf(await ui.drawn())
+
+  expect(drawn).not.toMatch(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/)
+  expect(drawn).toContain('p-epic')
+  expect(drawn).toContain('dev/bad')
+  expect(drawn).toContain('Evil title')
+
+  await $.command.run({ command: 'hivewatch', args: 'off' } as never)
+})

@@ -33,11 +33,38 @@ export const parseJson = (stdout: string): unknown => {
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null
 
+// Text from bh can originate outside the operator (intake imports external
+// titles), so it must never reach the terminal with live control sequences.
+const ESCAPES = new RegExp(
+  [
+    '\\u001b\\][^\\u0007\\u001b\\u009c]*(?:\\u0007|\\u001b\\\\|\\u009c)', // OSC, ESC form
+    '\\u009d[^\\u0007\\u001b\\u009c]*(?:\\u0007|\\u001b\\\\|\\u009c)', // OSC, 8-bit form
+    '\\u001b\\[[0-?]*[ -/]*[@-~]', // CSI, ESC form
+    '\\u009b[0-?]*[ -/]*[@-~]', // CSI, 8-bit form
+    '\\u001b[ -/]*[0-~]', // other two-byte (and nF) escapes
+  ].join('|'),
+  'g',
+)
+
+export const sanitize = (s: string): string =>
+  s
+    .replace(ESCAPES, '')
+    .replace(/[\t\n\r]+/g, ' ')
+    .replace(/[\u0000-\u001f\u007f-\u009f]/g, '')
+    .replace(/ {2,}/g, ' ')
+    .trim()
+
+// Clean every string field of a bh record at the boundary.
+const cleanRecord = <T extends Record<string, unknown>>(r: T): T =>
+  Object.fromEntries(
+    Object.entries(r).map(([k, v]) => [k, typeof v === 'string' ? sanitize(v) : v]),
+  ) as T
+
 export const parseBeads = (stdout: string): RawBead[] => {
   const v = parseJson(stdout)
 
   return Array.isArray(v)
-    ? v.filter((b): b is RawBead => isRecord(b) && typeof b.id === 'string')
+    ? v.filter((b): b is RawBead => isRecord(b) && typeof b.id === 'string').map(cleanRecord)
     : []
 }
 
@@ -46,14 +73,14 @@ export const parseSteps = (stdout: string): RawStep[] => {
   const steps = isRecord(v) ? v.steps : null
 
   return Array.isArray(steps)
-    ? steps.filter((s): s is RawStep => isRecord(s) && typeof s.id === 'string')
+    ? steps.filter((s): s is RawStep => isRecord(s) && typeof s.id === 'string').map(cleanRecord)
     : []
 }
 
 export const parseWorktrees = (stdout: string): RawWorktree[] => {
   const v = parseJson(stdout)
 
-  return Array.isArray(v) ? v.filter((w): w is RawWorktree => isRecord(w)) : []
+  return Array.isArray(v) ? v.filter((w): w is RawWorktree => isRecord(w)).map(cleanRecord) : []
 }
 
 // A lease that has not run out means the agent is holding the bead; an
