@@ -55,38 +55,31 @@ export const sanitize = (s: string): string =>
     .trim()
 
 // Each parser builds its rows field by field from an explicit shape, so a
-// field of the wrong type (an array or object holding escapes) is dropped
-// here and unexpected keys never reach the pane.
+// field of the wrong type (an array or object holding escapes) never reaches
+// the pane and unexpected keys are dropped. Only a missing id drops a record
+// (it cannot be matched to anything); other bad fields get a placeholder so
+// real in-flight work stays visible.
 const text = (v: unknown): string | null => (typeof v === 'string' ? sanitize(v) : null)
-
-const nullableText = (v: unknown): string | null => text(v)
 
 export const parseBeads = (stdout: string): RawBead[] => {
   const v = parseJson(stdout)
   const out: RawBead[] = []
 
   for (const b of Array.isArray(v) ? v : []) {
-    if (!isRecord(b)) {
-      continue
-    }
+    const id = isRecord(b) ? text(b.id) : null
 
-    const id = text(b.id)
-    const title = text(b.title)
-    const status = text(b.status)
-    const issueType = text(b.issue_type)
-
-    if (id === null || title === null || status === null || issueType === null) {
+    if (!isRecord(b) || id === null) {
       continue
     }
 
     out.push({
       id,
-      title,
-      status,
-      assignee: nullableText(b.assignee),
-      issue_type: issueType,
-      heartbeat_at: nullableText(b.heartbeat_at),
-      lease_expires_at: nullableText(b.lease_expires_at),
+      title: text(b.title) ?? '(invalid title)',
+      status: text(b.status) ?? '',
+      assignee: text(b.assignee),
+      issue_type: text(b.issue_type) ?? '',
+      heartbeat_at: text(b.heartbeat_at),
+      lease_expires_at: text(b.lease_expires_at),
     })
   }
 
@@ -99,17 +92,13 @@ export const parseSteps = (stdout: string): RawStep[] => {
   const out: RawStep[] = []
 
   for (const s of Array.isArray(steps) ? steps : []) {
-    if (!isRecord(s)) {
+    const id = isRecord(s) ? text(s.id) : null
+
+    if (!isRecord(s) || id === null) {
       continue
     }
 
-    const id = text(s.id)
-    const status = text(s.status)
-    const readiness = text(s.readiness)
-
-    if (id !== null && status !== null && readiness !== null) {
-      out.push({ id, status, readiness })
-    }
+    out.push({ id, status: text(s.status) ?? '', readiness: text(s.readiness) ?? '' })
   }
 
   return out
@@ -117,21 +106,12 @@ export const parseSteps = (stdout: string): RawStep[] => {
 
 export const parseWorktrees = (stdout: string): RawWorktree[] => {
   const v = parseJson(stdout)
-  const out: RawWorktree[] = []
 
-  for (const w of Array.isArray(v) ? v : []) {
-    if (!isRecord(w)) {
-      continue
-    }
-
-    const classification = text(w.classification)
-
-    if (classification !== null) {
-      out.push({ bead_id: nullableText(w.bead_id), classification, dirty: w.dirty === true })
-    }
-  }
-
-  return out
+  return (Array.isArray(v) ? v : []).filter(isRecord).map(w => ({
+    bead_id: text(w.bead_id),
+    classification: text(w.classification) ?? '',
+    dirty: w.dirty === true,
+  }))
 }
 
 // A lease that has not run out means the agent is holding the bead; an

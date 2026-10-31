@@ -174,7 +174,9 @@ test('pane never draws array- or object-valued fields from bh output', async ($,
   expect(drawn).toContain('(unassigned)')
   expect(drawn).not.toContain('arrtitle')
   expect(drawn).not.toContain('objtitle')
-  expect(drawn).not.toContain('p-arr')
+  expect(drawn).toContain('p-arr')
+  expect(drawn).toContain('p-obj')
+  expect(drawn.match(/\(invalid title\)/g)).toHaveLength(2)
 
   await $.command.run({ command: 'hivewatch', args: 'off' } as never)
 })
