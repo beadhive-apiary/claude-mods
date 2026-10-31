@@ -135,3 +135,48 @@ test('parsers sanitize every string field', () => {
   const wts = parseWorktrees(JSON.stringify([{ bead_id: dirty('p-9'), classification: dirty('dirty'), dirty: true }]))
   expect(wts[0]).toEqual({ bead_id: 'p-9', classification: 'dirty', dirty: true })
 })
+
+test('parsers drop only records without an id and placeholder other bad fields', () => {
+  const evil = [`${ESC}[2Jpwned`]
+  const obj = { toString: `${ESC}]0;x\u0007` }
+
+  expect(parseBeads(JSON.stringify([bead({ id: evil }), bead({ id: obj }), bead({ id: undefined })]))).toEqual([])
+
+  const [b, ...rest] = parseBeads(
+    JSON.stringify([
+      bead({ title: evil, status: obj, issue_type: evil, assignee: evil, heartbeat_at: obj, lease_expires_at: 5, extra: evil }),
+      bead({ title: obj }),
+    ]),
+  )
+  expect(b).toEqual({
+    id: 'p-1',
+    title: '(invalid title)',
+    status: '',
+    assignee: null,
+    issue_type: '',
+    heartbeat_at: null,
+    lease_expires_at: null,
+  })
+  expect(rest[0]?.title).toBe('(invalid title)')
+
+  const steps = parseSteps(
+    JSON.stringify({ steps: [{ id: 'a', status: evil, readiness: 'done' }, { id: 'b', status: 'open', readiness: obj }, { id: evil, status: 'open', readiness: 'done' }] }),
+  )
+  expect(steps).toEqual([
+    { id: 'a', status: '', readiness: 'done' },
+    { id: 'b', status: 'open', readiness: '' },
+  ])
+  expect(moleculeRow(bead() as never, steps)).toMatchObject({ total: 2, done: 1, running: 0 })
+
+  expect(
+    parseWorktrees(
+      JSON.stringify([
+        { bead_id: evil, classification: 'clean', dirty: 'yes', extra: evil },
+        { bead_id: 'p-1', classification: evil, dirty: true },
+      ]),
+    ),
+  ).toEqual([
+    { bead_id: null, classification: 'clean', dirty: false },
+    { bead_id: 'p-1', classification: '', dirty: true },
+  ])
+})

@@ -130,3 +130,53 @@ test('pane never draws control sequences from bh output or errors', async ($, on
 
   await $.command.run({ command: 'hivewatch', args: 'off' } as never)
 })
+
+test('pane never draws array- or object-valued fields from bh output', async ($, on) => {
+  const ESC = '\u001b'
+  mock.clock(on, { now: Date.parse('2026-10-12T12:00:00Z') })
+  on('command.register', async (_$, e) => ({ value: { command: e.name } }) as never)
+  on('ui.status', async () => ({ value: undefined }) as never)
+  on('ui.open', async () => ({ value: { isPlaced: true } }) as never)
+  on('process.run', async (_$, e) => {
+    const argv = e.argv.join(' ')
+
+    if (argv.startsWith('bh work list')) {
+      return reply([
+        { id: 'p-ok', title: 'Fine title', status: 'in_progress', assignee: [`${ESC}[2Jpwned`], issue_type: 'task', heartbeat_at: LONG_AGO, lease_expires_at: FAR },
+        { id: 'p-arr', title: [`${ESC}]0;pwned\u0007arrtitle`], status: 'in_progress', assignee: 'dev/a', issue_type: 'task' },
+        { id: 'p-obj', title: { t: `${ESC}[2Jobjtitle` }, status: 'in_progress', assignee: 'dev/b', issue_type: 'task' },
+      ])
+    }
+
+    return reply([], 1)
+  })
+
+  await $.command.run({ command: 'hivewatch', args: '' } as never)
+
+  const ui = await $.ui.mount({
+    plugin: 'hivewatch',
+    surface: 'terminal',
+    component: 'Pane',
+    requestId: 'hivewatch',
+    props: {
+      title: 'Hive',
+      isFocused: false,
+      bodyColumns: 120,
+      placement: 'dock',
+      scroll: { offset: 0, bodyRows: 30 },
+    } as never,
+  })
+
+  const drawn = textOf(await ui.drawn())
+
+  expect(drawn).not.toMatch(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/)
+  expect(drawn).toContain('p-ok')
+  expect(drawn).toContain('(unassigned)')
+  expect(drawn).not.toContain('arrtitle')
+  expect(drawn).not.toContain('objtitle')
+  expect(drawn).toContain('p-arr')
+  expect(drawn).toContain('p-obj')
+  expect(drawn.match(/\(invalid title\)/g)).toHaveLength(2)
+
+  await $.command.run({ command: 'hivewatch', args: 'off' } as never)
+})
