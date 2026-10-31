@@ -10,6 +10,7 @@ import {
   parseBeads,
   parseSteps,
   parseWorktrees,
+  sanitize,
   summary,
   trunc,
 } from './model'
@@ -29,9 +30,9 @@ const bh = async ($: EngineInterface, args: string[]): Promise<BhResult> => {
 
     return ran.exitCode === 0
       ? { stdout: ran.stdout, error: null }
-      : { stdout: '', error: `bh ${args.slice(0, 2).join(' ')} exited ${ran.exitCode}` }
+      : { stdout: '', error: sanitize(`bh ${args.slice(0, 2).join(' ')} exited ${ran.exitCode}`) }
   } catch (err) {
-    return { stdout: '', error: `bh ${args.slice(0, 2).join(' ')}: ${String(err)}` }
+    return { stdout: '', error: sanitize(`bh ${args.slice(0, 2).join(' ')}: ${String(err)}`) }
   }
 }
 

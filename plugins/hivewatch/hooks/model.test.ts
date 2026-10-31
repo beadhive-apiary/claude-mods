@@ -9,6 +9,8 @@ import {
   moleculeRow,
   parseBeads,
   parseSteps,
+  parseWorktrees,
+  sanitize,
   summary,
   trunc,
   worktreeOf,
@@ -97,4 +99,39 @@ test('ages and truncation are compact', () => {
 test('summary counts live and stale agents', () => {
   const rows = agentRows([bead(), bead({ id: 's', lease_expires_at: '2026-10-01T00:00:00Z' })], [], NOW)
   expect(summary(rows)).toBe('1 live · 1 stale')
+})
+
+const ESC = '\u001b'
+
+test('sanitize strips CSI, OSC and other escape sequences but keeps the text', () => {
+  expect(sanitize(`a${ESC}[2Jb${ESC}[1;31mc`)).toBe('abc')
+  expect(sanitize(`${ESC}]0;pwned\u0007title`)).toBe('title')
+  expect(sanitize(`${ESC}]0;pwned${ESC}\\title`)).toBe('title')
+  expect(sanitize(`x ${ESC}]8;;https://evil.test\u0007click${ESC}]8;;\u0007 y`)).toBe('x click y')
+  expect(sanitize(`a${ESC}cb${ESC}(Bc`)).toBe('abc')
+})
+
+test('sanitize strips C0, DEL and C1 controls including 8-bit CSI and OSC', () => {
+  expect(sanitize('a\rb\u0007c\u0000d\u007fe')).toBe('a bcde')
+  expect(sanitize('a\u009b2Jb\u009d0;x\u009cc\u0085d\u009fe')).toBe('abcde')
+})
+
+test('sanitize maps tab and newline runs to one space and keeps Unicode', () => {
+  expect(sanitize('a\tb\n\nc\r\nd')).toBe('a b c d')
+  expect(sanitize('Café 日本語 🚀 naïve')).toBe('Café 日本語 🚀 naïve')
+})
+
+test('parsers sanitize every string field', () => {
+  const dirty = (s: string) => `${ESC}[2J${s}${ESC}]0;t\u0007`
+  const beads = parseBeads(
+    JSON.stringify([bead({ id: dirty('p-9'), title: dirty('T\titl\ne'), assignee: dirty('dev/a') })]),
+  )
+  expect(beads[0]).toMatchObject({ id: 'p-9', title: 'T itl e', assignee: 'dev/a' })
+  expect(parseBeads(JSON.stringify([bead({ assignee: null })]))[0]?.assignee).toBeNull()
+
+  const steps = parseSteps(JSON.stringify({ steps: [{ id: dirty('s'), status: dirty('open'), readiness: dirty('done') }] }))
+  expect(steps[0]).toEqual({ id: 's', status: 'open', readiness: 'done' })
+
+  const wts = parseWorktrees(JSON.stringify([{ bead_id: dirty('p-9'), classification: dirty('dirty'), dirty: true }]))
+  expect(wts[0]).toEqual({ bead_id: 'p-9', classification: 'dirty', dirty: true })
 })
