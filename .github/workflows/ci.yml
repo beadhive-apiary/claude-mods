@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  MISE_VERSION: v2026.10.20
+  MISE_SHA256: 5a9057180c3a9a795076f84be4f5f372e6e37179e1aeb49732928d6b395ce829
+
+jobs:
+  check:
+    name: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install mise (pinned, checksum-verified)
+        run: |
+          archive="mise-${MISE_VERSION}-linux-x64.tar.gz"
+          curl -fsSL -o "${RUNNER_TEMP}/${archive}" \
+            "https://github.com/jdx/mise/releases/download/${MISE_VERSION}/${archive}"
+          echo "${MISE_SHA256}  ${RUNNER_TEMP}/${archive}" | sha256sum --check --strict -
+          mkdir -p "${RUNNER_TEMP}/mise-install"
+          tar -xzf "${RUNNER_TEMP}/${archive}" -C "${RUNNER_TEMP}/mise-install"
+          echo "${RUNNER_TEMP}/mise-install/mise/bin" >> "${GITHUB_PATH}"
+
+      - name: Install pinned tools from mise.lock
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          mise install
+          mise bin-paths >> "${GITHUB_PATH}"
+
+      - name: Verify Beadhive-compatible command interface
+        run: |
+          just --list
+          for recipe in setup check validate test; do just --show "${recipe}" > /dev/null; done
+
+      # `claude plugin validate` and `claude plugin test` need no API key or login.
+      - name: Check
+        run: just check

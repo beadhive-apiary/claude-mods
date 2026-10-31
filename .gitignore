@@ -1,0 +1,34 @@
+# OS and editor
+.DS_Store
+*.swp
+*~
+
+# Logs
+*.log
+
+# Node, should a mod ever need it
+node_modules/
+*.tsbuildinfo
+
+# Engine-generated mod type declarations: written per machine when a session
+# loads a mod, never committed (see README, Developing).
+plugins/*/tsconfig.json
+plugins/*/.claude-plugin/types/
+.mcpb-cache/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Beads, bh and agent tool state: local only
+.beads/
+.dolt/
+*.gate.lock*
+.bh/
+.agents/
+.claude/
+.codex/
+.cursor/
+.playwright-mcp/
+.repowise/

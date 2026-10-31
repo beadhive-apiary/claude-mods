@@ -1,0 +1,9 @@
+[settings]
+lockfile = true
+
+[tools]
+gitleaks = "8.30.1"
+just = "1.58.0"
+node = "24.20.0"
+# The Claude Code CLI provides `claude plugin validate` and `claude plugin test`.
+claude = "2.1.316"

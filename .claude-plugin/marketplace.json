@@ -1,0 +1,17 @@
+{
+  "name": "beadhive-apiary",
+  "owner": {
+    "name": "Beadhive Apiary",
+    "url": "https://github.com/beadhive-apiary"
+  },
+  "metadata": {
+    "description": "Semi-official Claude Code mods for Beadhive"
+  },
+  "plugins": [
+    {
+      "name": "hivewatch",
+      "source": "./plugins/hivewatch",
+      "description": "Live Beadhive status in a Claude Code pane: in-flight beads, per-agent liveness, molecule progress"
+    }
+  ]
+}
