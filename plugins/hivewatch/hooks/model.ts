@@ -54,33 +54,84 @@ export const sanitize = (s: string): string =>
     .replace(/ {2,}/g, ' ')
     .trim()
 
-// Clean every string field of a bh record at the boundary.
-const cleanRecord = <T extends Record<string, unknown>>(r: T): T =>
-  Object.fromEntries(
-    Object.entries(r).map(([k, v]) => [k, typeof v === 'string' ? sanitize(v) : v]),
-  ) as T
+// Each parser builds its rows field by field from an explicit shape, so a
+// field of the wrong type (an array or object holding escapes) is dropped
+// here and unexpected keys never reach the pane.
+const text = (v: unknown): string | null => (typeof v === 'string' ? sanitize(v) : null)
+
+const nullableText = (v: unknown): string | null => text(v)
 
 export const parseBeads = (stdout: string): RawBead[] => {
   const v = parseJson(stdout)
+  const out: RawBead[] = []
 
-  return Array.isArray(v)
-    ? v.filter((b): b is RawBead => isRecord(b) && typeof b.id === 'string').map(cleanRecord)
-    : []
+  for (const b of Array.isArray(v) ? v : []) {
+    if (!isRecord(b)) {
+      continue
+    }
+
+    const id = text(b.id)
+    const title = text(b.title)
+    const status = text(b.status)
+    const issueType = text(b.issue_type)
+
+    if (id === null || title === null || status === null || issueType === null) {
+      continue
+    }
+
+    out.push({
+      id,
+      title,
+      status,
+      assignee: nullableText(b.assignee),
+      issue_type: issueType,
+      heartbeat_at: nullableText(b.heartbeat_at),
+      lease_expires_at: nullableText(b.lease_expires_at),
+    })
+  }
+
+  return out
 }
 
 export const parseSteps = (stdout: string): RawStep[] => {
   const v = parseJson(stdout)
   const steps = isRecord(v) ? v.steps : null
+  const out: RawStep[] = []
 
-  return Array.isArray(steps)
-    ? steps.filter((s): s is RawStep => isRecord(s) && typeof s.id === 'string').map(cleanRecord)
-    : []
+  for (const s of Array.isArray(steps) ? steps : []) {
+    if (!isRecord(s)) {
+      continue
+    }
+
+    const id = text(s.id)
+    const status = text(s.status)
+    const readiness = text(s.readiness)
+
+    if (id !== null && status !== null && readiness !== null) {
+      out.push({ id, status, readiness })
+    }
+  }
+
+  return out
 }
 
 export const parseWorktrees = (stdout: string): RawWorktree[] => {
   const v = parseJson(stdout)
+  const out: RawWorktree[] = []
 
-  return Array.isArray(v) ? v.filter((w): w is RawWorktree => isRecord(w)).map(cleanRecord) : []
+  for (const w of Array.isArray(v) ? v : []) {
+    if (!isRecord(w)) {
+      continue
+    }
+
+    const classification = text(w.classification)
+
+    if (classification !== null) {
+      out.push({ bead_id: nullableText(w.bead_id), classification, dirty: w.dirty === true })
+    }
+  }
+
+  return out
 }
 
 // A lease that has not run out means the agent is holding the bead; an

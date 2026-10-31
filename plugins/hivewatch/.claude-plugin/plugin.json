@@ -1,6 +1,6 @@
 {
   "name": "hivewatch",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Live Beadhive status in a Claude Code pane: in-flight beads, per-agent liveness, molecule progress",
   "author": {
     "name": "Beadhive Apiary",
